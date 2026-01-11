@@ -1,0 +1,221 @@
+import numpy as np
+import cv2 as cv
+import time
+import matrix as mat
+import ui
+
+
+
+def ptCollidesWithBox(x, y, box):
+    pt1, pt2 = box
+    return x >= pt1[0] and x <= pt2[0] and y >= pt1[1] and y <= pt2[1]
+
+
+def ptCollidesWithBoxes(x, y, boxes):
+    for box in boxes:
+        if ptCollidesWithBox(x, y, box):
+            return True
+    return False
+
+
+def ptsCollideWithBoxes(pts, boxes):
+    if len(pts.shape) != 3:
+        raise NotImplementedError
+    
+    collisions = np.zeros((pts.shape[:2]), dtype='bool')
+    for pt1, pt2 in boxes:
+        collisions |= np.logical_and(np.logical_and(pts[:,:,0] >= pt1[0], pts[:,:,0] <= pt2[0]),
+                                     np.logical_and(pts[:,:,1] >= pt1[1], pts[:,:,1] <= pt2[1]))        
+    return collisions
+
+
+def linesCollideWithBoxes(lines, boxes):
+    if len(lines[0].shape) != 3:
+        raise NotImplementedError
+    
+    collisions = np.zeros((lines[0].shape[:2]), dtype='bool')
+
+    for begin_pts, end_pts in zip(lines[:-1], lines[1:]):
+
+        m = (end_pts[:,:,1] - begin_pts[:,:,1]) / (end_pts[:,:,0] - begin_pts[:,:,0])
+        min_x = np.minimum(begin_pts[:,:,0], end_pts[:,:,0])
+        max_x = np.maximum(begin_pts[:,:,0], end_pts[:,:,0])
+        
+        for pt1, pt2 in boxes:
+            x1 = begin_pts[:,:,0] + (pt1[1] - begin_pts[:,:,1]) / m     # intersection with top line of box
+            collisions |= np.logical_and(np.logical_and(x1 >= pt1[0], x1 <= pt2[0]),
+                                         np.logical_and(x1 >= min_x, x1 <= max_x))
+            x2 = begin_pts[:,:,0] + (pt2[1] - begin_pts[:,:,1]) / m     # intersection with bottom line of box
+            collisions |= np.logical_and(np.logical_and(x2 >= pt1[0], x2 <= pt2[0]),
+                                         np.logical_and(x2 >= min_x, x2 <= max_x))
+
+    return collisions
+
+
+def plotDKin(canvas, base, segments):
+    a0 = np.linspace(-np.pi, np.pi, 360)
+    a1 = np.linspace(-np.pi, np.pi, 360)
+    a0v, a1v = np.meshgrid(a0, a1)
+
+    cv.imshow("angle 0", a0v)
+    cv.imshow("angle 1", a1v)
+
+    pos = np.zeros((360, 360, 3))
+    pos[:,:,2] = 1
+
+    _, l0 = segments[0]
+    _, l1 = segments[1]
+
+    ''' # proper matrix product solution using Einstein summation
+
+    mat_total_v = np.zeros((360, 360, 3, 3))
+    mat_total_v[:,:] = np.eye(3,3)
+
+
+    mat0_rot_v = np.zeros((360, 360, 3, 3))
+    mat0_rot_v[:,:] = np.eye(3,3)
+    mat0_rot_v[:,:,0,0] = np.cos(a0v)
+    mat0_rot_v[:,:,1,0] = -np.sin(a0v)
+    mat0_rot_v[:,:,0,1] = np.sin(a0v)
+    mat0_rot_v[:,:,1,1] = np.cos(a0v)
+
+    mat_total_v = np.einsum('mnij,mnjk->mnik', mat_total_v, mat0_rot_v)
+
+    mat0_trans_v = np.zeros((360, 360, 3, 3))
+    mat0_trans_v[:,:] = np.eye(3,3)
+    mat0_trans_v[:,:,0,2] = l0
+
+    mat_total_v = np.einsum('mnij,mnjk->mnik', mat_total_v, mat0_trans_v)
+
+    mat1_rot_v = np.zeros((360, 360, 3, 3))
+    mat1_rot_v[:,:] = np.eye(3,3)
+    mat1_rot_v[:,:,0,0] = np.cos(a1v)
+    mat1_rot_v[:,:,1,0] = -np.sin(a1v)
+    mat1_rot_v[:,:,0,1] = np.sin(a1v)
+    mat1_rot_v[:,:,1,1] = np.cos(a1v)
+
+    mat_total_v = np.einsum('mnij,mnjk->mnik', mat_total_v, mat1_rot_v)
+
+    mat1_trans_v = np.zeros((360, 360, 3, 3))
+    mat1_trans_v[:,:] = np.eye(3,3)
+    mat1_trans_v[:,:,0,2] = l1
+
+    mat_total_v = np.einsum('mnij,mnjk->mnik', mat_total_v, mat1_trans_v)
+
+    pos = np.einsum('mnij,mnj->mni', mat_total_v, pos)
+    '''
+
+    pos[:,:,0] += l1                                            # move along x by length of second segment
+    nx =  np.cos(a1v) * pos[:,:,0] + np.sin(a1v) * pos[:,:,1]   # rotate by second angle
+    ny = -np.sin(a1v) * pos[:,:,0] + np.cos(a1v) * pos[:,:,1]
+    pos[:,:,0] = nx
+    pos[:,:,1] = ny
+    
+    _, l0 = segments[0]
+    pos[:,:,0] += l0                                            # move along x by length of first segment
+    nx =  np.cos(a0v) * pos[:,:,0] + np.sin(a0v) * pos[:,:,1]   # rotate by first angle
+    ny = -np.sin(a0v) * pos[:,:,0] + np.cos(a0v) * pos[:,:,1]
+    pos[:,:,0] = nx
+    pos[:,:,1] = ny
+    
+    canvas[:,:,2] = np.int8((pos[:,:,0] + base[0]) / (2 * base[0]) * 255)
+    canvas[:,:,1] = np.int8((pos[:,:,1] + base[1]) / (2 * base[1]) * 255)
+
+    return canvas
+
+
+def dkin_all_angles(segments, resolution):
+    if len(segments) > 2:
+        raise NotImplementedError("currently can't handle more than 2 segments")
+    
+    angle_meshes = [np.linspace(-np.pi, np.pi, resolution) for _ in segments]
+    angle_meshes = np.meshgrid(*angle_meshes)
+
+    pos_v = np.zeros((resolution, resolution, 2))
+
+    for (_, length), av in zip(segments[::-1], angle_meshes[::-1]):
+        pos_v[:,:,0] += length                                          # translate by segment length along x
+        nx =  np.cos(av) * pos_v[:,:,0] + np.sin(av) * pos_v[:,:,1]     # rotate by all angles
+        ny = -np.sin(av) * pos_v[:,:,0] + np.cos(av) * pos_v[:,:,1]
+        pos_v[:,:,0] = nx
+        pos_v[:,:,1] = ny
+
+    return pos_v
+
+
+wsize = (800, 800)
+base = np.array(wsize) / 2
+segments = [
+    (0, 90),
+    (0, 250)
+]
+
+boxes = [
+    (np.array([-100, -300]), np.array([200, -80])),
+    (np.array([-300, 200]), np.array([-100, 300]))
+]
+
+target = np.int32(base) + np.array([-100, 0])
+grab_relative = np.array([0, 0])
+mouse_grab = 0
+def on_mouse(event,x,y,flags,param):
+    global target, boxes, grab_relative, mouse_grab
+    if event == cv.EVENT_LBUTTONDOWN:
+        if np.linalg.norm(np.array([x,y]) - target) < 17:
+            mouse_grab = 1
+        for i, box in enumerate(boxes):
+            if ptCollidesWithBox(x - base[0], y - base[1], box):
+                mouse_grab = i + 2
+                grab_relative = box[0] - np.array([x, y]) + base
+    if event == cv.EVENT_MOUSEMOVE and mouse_grab > 0:
+        if mouse_grab == 1:
+            target = np.array([x, y])
+        else:
+            i = mouse_grab - 2
+            bsize = boxes[i][1] - boxes[i][0]
+            pt1 = np.array([x, y]) - base + grab_relative
+            boxes[i] = (pt1, pt1 + bsize)
+    if event == cv.EVENT_LBUTTONUP:
+        mouse_grab = 0
+
+canvas = ui.new("scene", wsize, on_mouse)
+dkin_plot = np.zeros((360, 360, 3), dtype='uint8')
+
+while ui.show(30):
+    # draw scene
+    segments = mat.FABRIK_step(target, base, segments)
+    canvas &= 0
+    canvas = ui.drawChain(canvas, base, segments, target)
+    canvas = ui.drawBoxes(canvas, base, boxes)
+
+    # draw C-space plot
+    dkin_pos_v = dkin_all_angles(segments, 360)   # chain end positions for all possible angle combinations under the given resolution
+    dkin_pos1_v = dkin_all_angles(segments[:-1], 360)
+    dkin_pos0_v = np.zeros_like(dkin_pos_v)
+
+    # plot end positions
+    dkin_plot &= 0
+    dkin_plot[:,:,2] = np.int8((dkin_pos_v[:,:,0] + base[0]) / (2 * base[0]) * 255)
+    dkin_plot[:,:,1] = np.int8((dkin_pos_v[:,:,1] + base[1]) / (2 * base[1]) * 255)
+
+    # plot box colliders
+    mask = np.zeros_like(dkin_plot, dtype='bool')
+    mask[:,:,0] = mask[:,:,1] = mask[:,:,2] = linesCollideWithBoxes([dkin_pos0_v, dkin_pos1_v, dkin_pos_v], boxes)
+    dkin_plot = np.where(mask, np.zeros_like(dkin_plot), dkin_plot)
+
+    # plot solution curve
+    mask = np.zeros_like(dkin_plot, dtype='bool')
+    mask[:,:,0] = np.abs(dkin_pos_v[:,:,0] - (target[0] - base[0])) + \
+                  np.abs(dkin_pos_v[:,:,1] - (target[1] - base[1])) < 10.0
+    mask[:,:,1] = mask[:,:,2] = mask[:,:,0]
+    dkin_plot = np.where(mask, np.ones_like(dkin_plot) * 255, dkin_plot)
+    
+    # plot current configuration
+    cur_ang = (np.int32(np.degrees(segments[0][0]) + 540) % 360, 
+               np.int32(np.degrees(segments[1][0]) + 540) % 360)
+    dkin_plot = cv.circle(dkin_plot, (cur_ang), 3, (255,0,128))
+    
+    res_dkin_plot = cv.resize(dkin_plot, (720, 720))
+    cv.imshow("C space", res_dkin_plot)
+
+ui.close()
