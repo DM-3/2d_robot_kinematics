@@ -14,10 +14,14 @@ def close():
     cv.destroyAllWindows()
 
 
-def show(ms: int = 10) -> bool:
+def showKey(ms: int = 10) -> bool:
     for name, img in _windows.items():
         cv.imshow(name, img)
-    return cv.waitKey(ms) != 27
+    return cv.waitKey(ms)
+
+
+def show(ms: int = 10) -> bool:
+    return showKey(ms) != 27
 
 
 def new(name, size, mouse_cb=None) -> np.ndarray:
@@ -52,4 +56,22 @@ def drawChain(canvas, base, segments, target):
 def drawBoxes(canvas, base, boxes):
     for pt1, pt2 in boxes:
         canvas = cv.rectangle(canvas, np.int32(pt1 + base), np.int32(pt2 + base), (255,128,128), 3)
+    return canvas
+
+
+def drawGraph(canvas, edges):
+    size = np.array([canvas.shape[1], canvas.shape[0]])
+    scale = size / 2 / np.pi
+    center = np.int32(size // 2)
+    
+    def pmap(p):
+        tp = np.int32(p * scale) + center
+        return np.array([tp[0] % size[0], tp[1] % size[1]])
+    
+    for begin, end in edges:
+        b = pmap(begin)
+        e = pmap(end)
+        if np.linalg.norm(b - e, np.inf) < canvas.shape[0] / 2:
+            canvas = cv.line(canvas, b, e, (255,0,0), 1)
+
     return canvas
