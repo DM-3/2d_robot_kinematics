@@ -29,6 +29,16 @@ def ptsCollideWithBoxes(pts, boxes):
     return collisions
 
 
+def configCollidesWithBoxes(q, segments, boxes):
+    s = [(q[i], seg[1]) for i, seg in enumerate(segments)]
+    pts = mat.forward(s)
+    p0 = np.array([[pts[0]]])
+    p1 = np.array([[pts[1]]])
+    p2 = np.array([[pts[2]]])
+    c = linesCollideWithBoxes([p0, p1, p2], boxes)
+    return c[0,0]
+
+
 def linesCollideWithBoxes(lines, boxes):
     if len(lines[0].shape) != 3:
         raise NotImplementedError
@@ -40,6 +50,8 @@ def linesCollideWithBoxes(lines, boxes):
         m = (end_pts[:,:,1] - begin_pts[:,:,1]) / (end_pts[:,:,0] - begin_pts[:,:,0])
         min_x = np.minimum(begin_pts[:,:,0], end_pts[:,:,0])
         max_x = np.maximum(begin_pts[:,:,0], end_pts[:,:,0])
+        min_y = np.minimum(begin_pts[:,:,1], end_pts[:,:,1])
+        max_y = np.maximum(begin_pts[:,:,1], end_pts[:,:,1])
         
         for pt1, pt2 in boxes:
             x1 = begin_pts[:,:,0] + (pt1[1] - begin_pts[:,:,1]) / m     # intersection with top line of box
@@ -48,95 +60,32 @@ def linesCollideWithBoxes(lines, boxes):
             x2 = begin_pts[:,:,0] + (pt2[1] - begin_pts[:,:,1]) / m     # intersection with bottom line of box
             collisions |= np.logical_and(np.logical_and(x2 >= pt1[0], x2 <= pt2[0]),
                                          np.logical_and(x2 >= min_x, x2 <= max_x))
+            y1 = begin_pts[:,:,1] + (pt1[0] - begin_pts[:,:,0]) * m     # intersection with top line of box
+            collisions |= np.logical_and(np.logical_and(y1 >= pt1[1], y1 <= pt2[1]),
+                                         np.logical_and(y1 >= min_y, y1 <= max_y))
+            y2 = begin_pts[:,:,1] + (pt2[0] - begin_pts[:,:,0]) * m     # intersection with bottom line of box
+            collisions |= np.logical_and(np.logical_and(y2 >= pt1[1], y2 <= pt2[1]),
+                                         np.logical_and(y2 >= min_y, y2 <= max_y))
 
     return collisions
-
-
-def plotDKin(canvas, base, segments):
-    a0 = np.linspace(-np.pi, np.pi, 360)
-    a1 = np.linspace(-np.pi, np.pi, 360)
-    a0v, a1v = np.meshgrid(a0, a1)
-
-    cv.imshow("angle 0", a0v)
-    cv.imshow("angle 1", a1v)
-
-    pos = np.zeros((360, 360, 3))
-    pos[:,:,2] = 1
-
-    _, l0 = segments[0]
-    _, l1 = segments[1]
-
-    ''' # proper matrix product solution using Einstein summation
-
-    mat_total_v = np.zeros((360, 360, 3, 3))
-    mat_total_v[:,:] = np.eye(3,3)
-
-
-    mat0_rot_v = np.zeros((360, 360, 3, 3))
-    mat0_rot_v[:,:] = np.eye(3,3)
-    mat0_rot_v[:,:,0,0] = np.cos(a0v)
-    mat0_rot_v[:,:,1,0] = -np.sin(a0v)
-    mat0_rot_v[:,:,0,1] = np.sin(a0v)
-    mat0_rot_v[:,:,1,1] = np.cos(a0v)
-
-    mat_total_v = np.einsum('mnij,mnjk->mnik', mat_total_v, mat0_rot_v)
-
-    mat0_trans_v = np.zeros((360, 360, 3, 3))
-    mat0_trans_v[:,:] = np.eye(3,3)
-    mat0_trans_v[:,:,0,2] = l0
-
-    mat_total_v = np.einsum('mnij,mnjk->mnik', mat_total_v, mat0_trans_v)
-
-    mat1_rot_v = np.zeros((360, 360, 3, 3))
-    mat1_rot_v[:,:] = np.eye(3,3)
-    mat1_rot_v[:,:,0,0] = np.cos(a1v)
-    mat1_rot_v[:,:,1,0] = -np.sin(a1v)
-    mat1_rot_v[:,:,0,1] = np.sin(a1v)
-    mat1_rot_v[:,:,1,1] = np.cos(a1v)
-
-    mat_total_v = np.einsum('mnij,mnjk->mnik', mat_total_v, mat1_rot_v)
-
-    mat1_trans_v = np.zeros((360, 360, 3, 3))
-    mat1_trans_v[:,:] = np.eye(3,3)
-    mat1_trans_v[:,:,0,2] = l1
-
-    mat_total_v = np.einsum('mnij,mnjk->mnik', mat_total_v, mat1_trans_v)
-
-    pos = np.einsum('mnij,mnj->mni', mat_total_v, pos)
-    '''
-
-    pos[:,:,0] += l1                                            # move along x by length of second segment
-    nx =  np.cos(a1v) * pos[:,:,0] + np.sin(a1v) * pos[:,:,1]   # rotate by second angle
-    ny = -np.sin(a1v) * pos[:,:,0] + np.cos(a1v) * pos[:,:,1]
-    pos[:,:,0] = nx
-    pos[:,:,1] = ny
-    
-    _, l0 = segments[0]
-    pos[:,:,0] += l0                                            # move along x by length of first segment
-    nx =  np.cos(a0v) * pos[:,:,0] + np.sin(a0v) * pos[:,:,1]   # rotate by first angle
-    ny = -np.sin(a0v) * pos[:,:,0] + np.cos(a0v) * pos[:,:,1]
-    pos[:,:,0] = nx
-    pos[:,:,1] = ny
-    
-    canvas[:,:,2] = np.int8((pos[:,:,0] + base[0]) / (2 * base[0]) * 255)
-    canvas[:,:,1] = np.int8((pos[:,:,1] + base[1]) / (2 * base[1]) * 255)
-
-    return canvas
 
 
 def dkin_all_angles(segments, resolution):
     if len(segments) > 2:
         raise NotImplementedError("currently can't handle more than 2 segments")
+
+    pos_v = np.zeros([resolution, resolution, 2])
     
-    angle_meshes = [np.linspace(-np.pi, np.pi, resolution) for _ in segments]
-    angle_meshes = np.meshgrid(*angle_meshes)
+    angle_l = [np.linspace(-np.pi, np.pi, resolution) for _ in segments]
+    sin_l = np.sin(angle_l)
+    cos_l = np.cos(angle_l)
+    sin_v = np.meshgrid(*sin_l)
+    cos_v = np.meshgrid(*cos_l)
 
-    pos_v = np.zeros((resolution, resolution, 2))
-
-    for (_, length), av in zip(segments[::-1], angle_meshes[::-1]):
-        pos_v[:,:,0] += length                                          # translate by segment length along x
-        nx =  np.cos(av) * pos_v[:,:,0] + np.sin(av) * pos_v[:,:,1]     # rotate by all angles
-        ny = -np.sin(av) * pos_v[:,:,0] + np.cos(av) * pos_v[:,:,1]
+    for (_, length), sin, cos in zip(segments[::-1], sin_v[::-1], cos_v[::-1]):
+        pos_v[:,:,0] += length                          # translate by segment length along x
+        nx =  cos * pos_v[:,:,0] + sin * pos_v[:,:,1]   # rotate by all angles
+        ny = -sin * pos_v[:,:,0] + cos * pos_v[:,:,1]
         pos_v[:,:,0] = nx
         pos_v[:,:,1] = ny
 
@@ -181,7 +130,7 @@ def on_mouse(event,x,y,flags,param):
 canvas = ui.new("scene", wsize, on_mouse)
 dkin_plot = np.zeros((360, 360, 3), dtype='uint8')
 
-while ui.show(30):
+while ui.show(20):
     # draw scene
     segments = mat.FABRIK_step(target, base, segments)
     canvas &= 0
@@ -217,5 +166,8 @@ while ui.show(30):
     
     res_dkin_plot = cv.resize(dkin_plot, (720, 720))
     cv.imshow("C space", res_dkin_plot)
+
+    q = [segments[0][0], segments[1][0]]
+    configCollidesWithBoxes(q, segments, boxes)
 
 ui.close()

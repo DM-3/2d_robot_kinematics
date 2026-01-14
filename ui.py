@@ -46,7 +46,8 @@ def drawChain(canvas, base, segments, target):
     # base
     canvas = cv.rectangle(canvas, np.int32(base - 30), np.int32(base + 30), (0, 255, 255), 3)
     # segments
-    pts = mat.forward(base, segments)
+    pts = mat.forward(segments)
+    pts = [pt + base for pt in pts]
     canvas = drawPoints(canvas, pts)
     # target
     canvas = cv.circle(canvas, target, 15, (255,255,255), 3)

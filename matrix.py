@@ -14,19 +14,20 @@ def trans(x, y):
                      [0, 0, 1]])
 
 
-def forward(base, segments):
-    pts = [base]
-    mat = np.eye(3, 3)
+def forward(segments):
+    pts = [np.zeros(2)]
+    mat = np.eye(3)
     for angle, length in segments:
         mat = mat @ rot(angle) @ trans(length, 0)
-        pts.append(mat[:2, 2] + base)
+        pts.append(mat[:2,2])
     return pts
 
 
 # Forward And Backward Reaching Inverse Kinematics
 def FABRIK_step(target, base, segments):
 
-    pts = forward(base, segments)
+    pts = forward(segments)
+    pts = [pt + base for pt in pts]
 
     # backward pass
     pts[-1] = target
