@@ -3,7 +3,7 @@ import cv2 as cv
 import time
 import matrix as mat
 import ui
-from plan import RRT
+from plan import *
 
 
 
@@ -172,7 +172,7 @@ while True:
                np.int32(np.degrees(segments[1][0]) + 540) % 360)
     dkin_plot = cv.circle(dkin_plot, (cur_ang), 3, (255,0,128))
 
-    if isinstance(planner, RRT):
+    if isinstance(planner, RRT) or isinstance(planner, PRM):
         for _ in range(10):
             planner.iterate()
         ui.drawGraph(dkin_plot, planner.edges)
@@ -180,7 +180,7 @@ while True:
     res_dkin_plot = cv.resize(dkin_plot, (720, 720))
     cv.imshow("C space", res_dkin_plot)
 
-    key = ui.showKey(10)
+    key = ui.showKey(1)
     if key == 27:
         break
     
@@ -193,11 +193,12 @@ while True:
         ptarget = (invkin_options[0][0] - 180.) / 180. * np.pi
         print("planning request from:", pstart, " to:",ptarget)
         pshape = np.array([2 * np.pi, 2 * np.pi])
-        planner = RRT(pstart, ptarget, pshape, 0.1, 0.03, 0.1, lambda q: configCollidesWithBoxes(q, segments, boxes))
+        #planner = RRT(pstart, ptarget, pshape, 0.1, 0.03, 0.1, lambda q: configCollidesWithBoxes(q, segments, boxes))
+        planner = PRM(pstart, ptarget, pshape, 0.01, lambda q: configCollidesWithBoxes(q, segments, boxes))
     
     # execute path
     if key == ord('e'):
-        if isinstance(planner, RRT):
+        if isinstance(planner, RRT) or isinstance(planner, PRM):
             if planner.finished:
                 path = planner.path()
 

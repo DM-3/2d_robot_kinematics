@@ -74,5 +74,28 @@ def drawGraph(canvas, edges):
         e = pmap(end)
         if np.linalg.norm(b - e, np.inf) < canvas.shape[0] / 2:
             canvas = cv.line(canvas, b, e, (255,0,0), 1)
+        
+        elif abs(b[0] - e[0]) > canvas.shape[0] / 2 and abs(b[1] - e[1]) < canvas.shape[1] / 2:
+            if b[0] > e[0]: b, e = e, b
+            off_x = np.array([canvas.shape[0], 0])
+            canvas = cv.line(canvas, b, e - off_x, (255,0,0), 1)
+            canvas = cv.line(canvas, b + off_x, e, (255,0,0), 1)
 
+        elif abs(b[1] - e[1]) > canvas.shape[1] / 2 and abs(b[0] - e[0]) < canvas.shape[0] / 2:
+            if b[1] > e[1]: b, e = e, b
+            off_y = np.array([0, canvas.shape[1]])
+            canvas = cv.line(canvas, b, e - off_y, (255,0,0), 1)
+            canvas = cv.line(canvas, b + off_y, e, (255,0,0), 1)
+
+        else:
+            if b[0] > e[0]: b, e = e, b
+            off_x = np.array([canvas.shape[0], 0])
+            off_y = np.array([0, canvas.shape[1]])
+            if b[1] > e[1]:
+                canvas = cv.line(canvas, b, e - off_x + off_y, (255,0,0), 1)
+                canvas = cv.line(canvas, b + off_x - off_y, e, (255,0,0), 1)
+            else:
+                canvas = cv.line(canvas, b, e - off_x - off_y, (255,0,0), 1)
+                canvas = cv.line(canvas, b + off_x + off_y, e, (255,0,0), 1)
+    
     return canvas

@@ -110,3 +110,111 @@ class RRT:
 
         return path
 
+
+class PRM:
+
+    def __init__(self, start, target, shape, step, sampler: Callable[[np.ndarray], bool]):
+        start = np.float64(start)
+        target = np.float64(target)
+        self.start = start
+        self.target = target
+        self.vertices = [start, target]
+        self.edges = []
+        self.shape = shape
+        self.step = step
+        self.sampler = sampler
+        self.finished = False
+
+    
+    def __wrapDiff(self, v1, v2):
+        d = v1 - v2
+        d = np.where(d > self.shape / 2, d - self.shape, d)
+        d = np.where(d < -self.shape / 2, d + self.shape, d)
+        return d
+    
+
+    def __distance(self, v1, v2):
+        return np.linalg.norm(self.__wrapDiff(v1, v2))
+    
+
+    def iterate(self):
+        if self.finished:
+            return
+        
+        # get a new random sample point
+        v_rand = (np.random.rand(len(self.shape)) - .5) * self.shape
+        if self.sampler(v_rand):
+            return
+        
+        # find 3 closesst vertices
+        closest = sorted(self.vertices, 
+                         key=lambda v: self.__distance(v, v_rand)
+                         )[:min(3, len(self.vertices))]
+
+        self.vertices.append(v_rand)
+        
+        # try connecting to the closest vertices
+        for v_near in closest:
+            d = self.__wrapDiff(v_rand, v_near)
+            dist = np.linalg.norm(d)
+            d = d / dist
+            total = 0.0
+            v_step = v_near.copy()
+            while total < dist:
+                v_step += d * self.step
+                v_step = np.mod(v_step + self.shape, self.shape)
+                total += self.step
+                if self.sampler(v_step):
+                    break
+            if total > dist:
+                self.edges.append((v_rand, v_near))
+
+        if len(self.path()) > 0:
+            self.finished = True
+            print("planner finished")
+
+
+    def path(self):
+        if len(self.edges) == 0:
+            return []
+
+        unvisited = [tuple(v) for v in self.vertices]
+
+        neighbors = {}
+        for v in unvisited:
+            neighbors[v] = []
+        for v1, v2 in self.edges:
+            neighbors[tuple(v1)].append(tuple(v2))
+            neighbors[tuple(v2)].append(tuple(v1))
+
+        distances = {}
+        for v in unvisited:
+            distances[v] = np.inf
+        distances[tuple(self.start)] = 0
+
+        prev = {}
+        for v in unvisited:
+            prev[v] = None
+
+        while len(unvisited) > 0:
+            v = min(unvisited, key=lambda v: distances[v])
+            unvisited.remove(v)
+            d = distances[v]
+            if d == np.inf:     # disconnected
+                return []
+            for n in neighbors[v]:
+                if d + 1 < distances[n]:
+                    distances[n] = d + 1
+                    prev[n] = v
+                if tuple(n) == tuple(self.target):
+                    unvisited = []
+
+        path = [tuple(self.target)]
+        while True:
+            p = prev[path[-1]]
+            if p is not None:
+                path.append(p)
+            else:
+                break
+        
+        return [np.array(v) for v in path]
