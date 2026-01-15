@@ -4,6 +4,7 @@ import time
 import matrix as mat
 import ui
 from plan import *
+import argparse
 
 
 
@@ -131,6 +132,13 @@ def on_mouse(event,x,y,flags,param):
 canvas = ui.new("scene", wsize, on_mouse)
 dkin_plot = np.zeros((360, 360, 3), dtype='uint8')
 
+parser = argparse.ArgumentParser()
+parser.add_argument("-p", "--planner", default="prm", help="""options:
+rrt (Rapid Random Tree),
+prm (Probabilistic Roadmap)
+""")
+args = parser.parse_args()
+
 planner = None
 path = []
 
@@ -193,9 +201,13 @@ while True:
         ptarget = (invkin_options[0][0] - 180.) / 180. * np.pi
         print("planning request from:", pstart, " to:",ptarget)
         pshape = np.array([2 * np.pi, 2 * np.pi])
-        #planner = RRT(pstart, ptarget, pshape, 0.1, 0.03, 0.1, lambda q: configCollidesWithBoxes(q, segments, boxes))
-        planner = PRM(pstart, ptarget, pshape, 0.01, lambda q: configCollidesWithBoxes(q, segments, boxes))
-    
+        if args.planner.lower() == "rrt":
+            planner = RRT(pstart, ptarget, pshape, 0.1, 0.03, 0.1, lambda q: configCollidesWithBoxes(q, segments, boxes))
+        elif args.planner.lower() == "prm":
+            planner = PRM(pstart, ptarget, pshape, 0.01, lambda q: configCollidesWithBoxes(q, segments, boxes))
+        else:
+            planner = PRM(pstart, ptarget, pshape, 0.01, lambda q: configCollidesWithBoxes(q, segments, boxes))
+
     # execute path
     if key == ord('e'):
         if isinstance(planner, RRT) or isinstance(planner, PRM):
