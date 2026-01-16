@@ -62,10 +62,10 @@ def linesCollideWithBoxes(lines, boxes):
             x2 = begin_pts[:,:,0] + (pt2[1] - begin_pts[:,:,1]) / m     # intersection with bottom line of box
             collisions |= np.logical_and(np.logical_and(x2 >= pt1[0], x2 <= pt2[0]),
                                          np.logical_and(x2 >= min_x, x2 <= max_x))
-            y1 = begin_pts[:,:,1] + (pt1[0] - begin_pts[:,:,0]) * m     # intersection with top line of box
+            y1 = begin_pts[:,:,1] + (pt1[0] - begin_pts[:,:,0]) * m     # intersection with left line of box
             collisions |= np.logical_and(np.logical_and(y1 >= pt1[1], y1 <= pt2[1]),
                                          np.logical_and(y1 >= min_y, y1 <= max_y))
-            y2 = begin_pts[:,:,1] + (pt2[0] - begin_pts[:,:,0]) * m     # intersection with bottom line of box
+            y2 = begin_pts[:,:,1] + (pt2[0] - begin_pts[:,:,0]) * m     # intersection with right line of box
             collisions |= np.logical_and(np.logical_and(y2 >= pt1[1], y2 <= pt2[1]),
                                          np.logical_and(y2 >= min_y, y2 <= max_y))
 
@@ -130,7 +130,8 @@ def on_mouse(event,x,y,flags,param):
         mouse_grab = 0
 
 canvas = ui.new("scene", wsize, on_mouse, ["cartesian xy"])
-dkin_plot = np.zeros((360, 360, 3), dtype='uint8')
+a_res = 540
+dkin_plot = np.zeros((a_res, a_res, 3), dtype='uint8')
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-p", "--planner", default="prm", help="""options:
@@ -154,8 +155,8 @@ while True:
     canvas = ui.drawChain(canvas, base, segments, target)
 
     # draw C-space plot
-    dkin_pos_v = dkin_all_angles(segments, 360)   # chain end positions for all possible angle combinations under the given resolution
-    dkin_pos1_v = dkin_all_angles(segments[:-1], 360)
+    dkin_pos_v = dkin_all_angles(segments, a_res)   # chain end positions for all possible angle combinations under the given resolution
+    dkin_pos1_v = dkin_all_angles(segments[:-1], a_res)
     dkin_pos0_v = np.zeros_like(dkin_pos_v)
 
     # plot end positions
@@ -165,7 +166,7 @@ while True:
 
     # plot box colliders
     bmask = np.zeros_like(dkin_plot, dtype='bool')
-    bmask[:,:,0] = bmask[:,:,1] = bmask[:,:,2] = linesCollideWithBoxes([dkin_pos0_v, dkin_pos1_v, dkin_pos_v], boxes)
+    bmask[:,:,0] = bmask[:,:,1] = bmask[:,:,2] = linesCollideWithBoxes(np.float32([dkin_pos0_v, dkin_pos1_v, dkin_pos_v]), boxes)
     dkin_plot *= np.uint8(~bmask)
     dkin_plot += np.ones_like(dkin_plot) * bmask * np.where(
         cv.erode(np.uint8(bmask), np.ones((3,3), np.uint8)) > 0, 
@@ -180,8 +181,8 @@ while True:
     dkin_plot = np.where(smask, np.ones_like(dkin_plot) * ui.Colors.target.value[0], dkin_plot)
     
     # plot current configuration
-    cur_ang = (np.int32(np.degrees(segments[0][0]) + 540) % 360, 
-               np.int32(np.degrees(segments[1][0]) + 540) % 360)
+    cur_ang = (np.int32((np.degrees(segments[0][0]) + 180) * a_res / 360) % a_res, 
+               np.int32((np.degrees(segments[1][0]) + 180) * a_res / 360) % a_res)
     dkin_plot = cv.circle(dkin_plot, (cur_ang), 3, ui.Colors.joint_outline.value, 2)
 
     if isinstance(planner, Planner):
@@ -189,7 +190,7 @@ while True:
             planner.iterate()
         ui.drawGraph(dkin_plot, planner.edges)
     
-    res_dkin_plot = cv.resize(dkin_plot, (720, 720))
+    res_dkin_plot = cv.resize(dkin_plot, wsize)
     cv.imshow("C space", res_dkin_plot)
 
     key = ui.showKey(1)
@@ -202,7 +203,7 @@ while True:
         invkin_options = cv.findNonZero(np.where(smask[:,:,0] & ~bmask[:,:,0], np.uint8(1), np.uint8(0)))
         if invkin_options is None:
             continue
-        ptarget = (invkin_options[0][0] - 180.) / 180. * np.pi
+        ptarget = (invkin_options[0][0] - (a_res / 2)) / a_res * 2 * np.pi
         print("planning request from:", pstart, " to:",ptarget)
         pshape = np.array([2 * np.pi, 2 * np.pi])
         if args.planner.lower() == "rrt":

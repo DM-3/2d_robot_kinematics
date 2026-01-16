@@ -14,6 +14,7 @@ class Colors(Enum):
     segment_outline = 64,255,255,
     target          = 255,255,255,
     edge            = 255,0,0,
+    path_edge       = 255,200,0
 
 
 _windows: dict[str, np.ndarray] = {}
@@ -114,7 +115,7 @@ def drawShortestLine(canvas, b, e, c=Colors.edge.value):
     return canvas
 
 
-def drawGraph(canvas, edges):
+def drawGraph(canvas, edges, color=Colors.edge.value):
     size = np.array([canvas.shape[1], canvas.shape[0]])
     scale = size / 2 / np.pi
     center = np.int32(size // 2)
@@ -126,5 +127,5 @@ def drawGraph(canvas, edges):
     for begin, end in edges:
         b = pmap(begin)
         e = pmap(end)
-        canvas = drawShortestLine(canvas, b, e, c=Colors.edge.value)
+        canvas = drawShortestLine(canvas, b, e, color)
     return canvas
