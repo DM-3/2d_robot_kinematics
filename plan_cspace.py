@@ -3,7 +3,7 @@ import cv2 as cv
 import time
 import matrix as mat
 import ui
-from plan import *
+from planners import *
 import argparse
 
 
@@ -180,7 +180,7 @@ while True:
                np.int32(np.degrees(segments[1][0]) + 540) % 360)
     dkin_plot = cv.circle(dkin_plot, (cur_ang), 3, (255,0,128))
 
-    if isinstance(planner, RRT) or isinstance(planner, PRM):
+    if isinstance(planner, Planner):
         for _ in range(10):
             planner.iterate()
         ui.drawGraph(dkin_plot, planner.edges)
@@ -210,7 +210,7 @@ while True:
 
     # execute path
     if key == ord('e'):
-        if isinstance(planner, RRT) or isinstance(planner, PRM):
+        if isinstance(planner, Planner):
             if planner.finished:
                 path = planner.path()
 

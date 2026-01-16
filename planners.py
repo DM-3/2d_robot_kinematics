@@ -1,10 +1,27 @@
 from collections.abc import Callable
+from abc import ABC, abstractmethod
 import numpy as np
 
 
 
-class RRT:
+class Planner(ABC):
+    def __init__(self):
+        self.finished = False
 
+    @abstractmethod
+    def difference(self, v1, v2) -> np.ndarray: pass
+
+    def distance(self, v1, v2) -> float:
+        return np.linalg.norm(self.difference(v1, v2))
+    
+    @abstractmethod
+    def iterate(self) -> None: pass
+
+    @abstractmethod
+    def path(self) -> list[np.ndarray]: pass
+
+
+class RRT(Planner):
     def __init__(self, start, target, shape, delta, step, tdist, sampler: Callable[[np.ndarray], bool]):
         self.vertices = [np.float64(start)]
         self.target = np.float64(target)
@@ -14,19 +31,13 @@ class RRT:
         self.step = step
         self.tdist = tdist
         self.sampler = sampler
-        self.finished = False
-
+        super().__init__()
     
-    def __wrapDiff(self, v1, v2):
+    def difference(self, v1, v2):
         d = v1 - v2
         d = np.where(d > self.shape / 2, d - self.shape, d)
         d = np.where(d < -self.shape / 2, d + self.shape, d)
         return d
-
-
-    def __distance(self, v1, v2):
-        return np.linalg.norm(self.__wrapDiff(v1, v2))
-
 
     def iterate(self):
         if self.finished:
@@ -43,14 +54,14 @@ class RRT:
             return
 
         # find known vertex closest to new sample
-        v_near = min(self.vertices, key=lambda v: self.__distance(v, v_rand))
+        v_near = min(self.vertices, key=lambda v: self.distance(v, v_rand))
         finish_candidate = False
-        if self.__distance(self.target, v_near) < self.tdist:
+        if self.distance(self.target, v_near) < self.tdist:
             finish_candidate = True
             v_rand = self.target
 
         # sample along direction towards new sample
-        d = self.__wrapDiff(v_rand, v_near)
+        d = self.difference(v_rand, v_near)
         dist = np.linalg.norm(d)
         d = d / dist
         
@@ -80,7 +91,6 @@ class RRT:
             self.finished = True
             print("planner finished")
 
-
     def path(self):
         if len(self.edges) == 0:
             return []
@@ -97,7 +107,7 @@ class RRT:
         for v1, v2 in self.edges:
             prev[tuple(v2)] = v1
 
-        vt = min(vertex_set.items(), key=lambda kvp: self.__distance(kvp[1], self.target))[1]
+        vt = min(vertex_set.items(), key=lambda kvp: self.distance(kvp[1], self.target))[1]
 
         path = [vt]
         while True:
@@ -111,8 +121,7 @@ class RRT:
         return path
 
 
-class PRM:
-
+class PRM(Planner):
     def __init__(self, start, target, shape, step, sampler: Callable[[np.ndarray], bool]):
         start = np.float64(start)
         target = np.float64(target)
@@ -123,19 +132,13 @@ class PRM:
         self.shape = shape
         self.step = step
         self.sampler = sampler
-        self.finished = False
+        super().__init__()
 
-    
-    def __wrapDiff(self, v1, v2):
+    def difference(self, v1, v2):
         d = v1 - v2
         d = np.where(d > self.shape / 2, d - self.shape, d)
         d = np.where(d < -self.shape / 2, d + self.shape, d)
         return d
-    
-
-    def __distance(self, v1, v2):
-        return np.linalg.norm(self.__wrapDiff(v1, v2))
-    
 
     def iterate(self):
         if self.finished:
@@ -148,14 +151,14 @@ class PRM:
         
         # find 3 closesst vertices
         closest = sorted(self.vertices, 
-                         key=lambda v: self.__distance(v, v_rand)
+                         key=lambda v: self.distance(v, v_rand)
                          )[:min(3, len(self.vertices))]
 
         self.vertices.append(v_rand)
         
         # try connecting to the closest vertices
         for v_near in closest:
-            d = self.__wrapDiff(v_rand, v_near)
+            d = self.difference(v_rand, v_near)
             dist = np.linalg.norm(d)
             d = d / dist
             total = 0.0
@@ -172,7 +175,6 @@ class PRM:
         if len(self.path()) > 0:
             self.finished = True
             print("planner finished")
-
 
     def path(self):
         if len(self.edges) == 0:
