@@ -129,14 +129,14 @@ def on_mouse(event,x,y,flags,param):
     if event == cv.EVENT_LBUTTONUP:
         mouse_grab = 0
 
-canvas = ui.new("scene", wsize, on_mouse)
+canvas = ui.new("scene", wsize, on_mouse, ["cartesian xy"])
 dkin_plot = np.zeros((360, 360, 3), dtype='uint8')
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-p", "--planner", default="prm", help="""options:
-rrt (Rapid Random Tree),
-prm (Probabilistic Roadmap)
-""")
+    rrt (Rapid Random Tree),
+    prm (Probabilistic Roadmap)
+    """)
 args = parser.parse_args()
 
 planner = None
@@ -149,9 +149,9 @@ while True:
         segments = [(q[i], seg[1]) for i, seg in enumerate(segments)]
 
     # draw scene
-    canvas &= 0
-    canvas = ui.drawChain(canvas, base, segments, target)
+    canvas = ui.drawGradient(canvas, cv.getTrackbarPos("cartesian xy", "scene") * .01)
     canvas = ui.drawBoxes(canvas, base, boxes)
+    canvas = ui.drawChain(canvas, base, segments, target)
 
     # draw C-space plot
     dkin_pos_v = dkin_all_angles(segments, 360)   # chain end positions for all possible angle combinations under the given resolution
@@ -160,25 +160,29 @@ while True:
 
     # plot end positions
     dkin_plot &= 0
-    dkin_plot[:,:,2] = np.int8((dkin_pos_v[:,:,0] + base[0]) / (2 * base[0]) * 255)
-    dkin_plot[:,:,1] = np.int8((dkin_pos_v[:,:,1] + base[1]) / (2 * base[1]) * 255)
+    dkin_plot[:,:,2] = np.int8((dkin_pos_v[:,:,0] + base[0]) / wsize[0] * 255 * cv.getTrackbarPos("cartesian xy", "scene") * .01)
+    dkin_plot[:,:,1] = np.int8((dkin_pos_v[:,:,1] + base[1]) / wsize[1] * 255 * cv.getTrackbarPos("cartesian xy", "scene") * .01)
 
     # plot box colliders
     bmask = np.zeros_like(dkin_plot, dtype='bool')
     bmask[:,:,0] = bmask[:,:,1] = bmask[:,:,2] = linesCollideWithBoxes([dkin_pos0_v, dkin_pos1_v, dkin_pos_v], boxes)
-    dkin_plot = np.where(bmask, np.zeros_like(dkin_plot), dkin_plot)
+    dkin_plot *= np.uint8(~bmask)
+    dkin_plot += np.ones_like(dkin_plot) * bmask * np.where(
+        cv.erode(np.uint8(bmask), np.ones((3,3), np.uint8)) > 0, 
+        np.uint8(ui.Colors.box.value[0]), 
+        np.uint8(ui.Colors.box_outline.value[0]))
 
     # plot solution curve
     smask = np.zeros_like(dkin_plot, dtype='bool')
     smask[:,:,0] = np.abs(dkin_pos_v[:,:,0] - (target[0] - base[0])) + \
                   np.abs(dkin_pos_v[:,:,1] - (target[1] - base[1])) < 8.0
     smask[:,:,1] = smask[:,:,2] = smask[:,:,0]
-    dkin_plot = np.where(smask, np.ones_like(dkin_plot) * 255, dkin_plot)
+    dkin_plot = np.where(smask, np.ones_like(dkin_plot) * ui.Colors.target.value[0], dkin_plot)
     
     # plot current configuration
     cur_ang = (np.int32(np.degrees(segments[0][0]) + 540) % 360, 
                np.int32(np.degrees(segments[1][0]) + 540) % 360)
-    dkin_plot = cv.circle(dkin_plot, (cur_ang), 3, (255,0,128))
+    dkin_plot = cv.circle(dkin_plot, (cur_ang), 3, ui.Colors.joint_outline.value, 2)
 
     if isinstance(planner, Planner):
         for _ in range(10):
